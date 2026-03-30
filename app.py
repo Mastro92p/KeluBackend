@@ -15,8 +15,7 @@ def verify_api_key(request: Request) -> None:
     if not key or key != API_SECRET:
         raise HTTPException(status_code=403, detail={"success": False, "status_code": 403, "message": "Forbidden"})
 
-protected_router = APIRouter(dependencies=[Depends(verify_api_key)])
-app.include_router(protected_router)
+
 
 class FormSubmission(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -68,6 +67,8 @@ def health():
 def api_health():
     return {"status": "healthy"}
 
+protected_router = APIRouter(dependencies=[Depends(verify_api_key)])
+
 @protected_router.post("/api/formsubmit")
 def form_submit(payload: FormSubmission, request: Request):
     
@@ -89,3 +90,5 @@ def form_submit(payload: FormSubmission, request: Request):
 
     except Exception as exc:
         raise build_exception(500, "Internal server error", exc) from exc
+    
+app.include_router(protected_router)
