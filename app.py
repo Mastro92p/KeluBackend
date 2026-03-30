@@ -1,11 +1,13 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 import logging
+import os
 
 
 app = FastAPI()
 logger = logging.getLogger(__name__)
+API_SECRET = os.getenv("FORM_API_SECRET")
 
 class FormSubmission(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -48,6 +50,11 @@ def build_success_response(payload: FormSubmission, airtable_response: dict) -> 
         "airtable": airtable_response
     }
 
+def verify_api_key(request: Request) -> None:
+    key = request.headers.get("x-api-key")
+    if not key or key != API_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
 
 @app.get("/")
 def health():
@@ -58,7 +65,10 @@ def api_health():
     return {"status": "healthy"}
 
 @app.post("/api/formsubmit")
-def form_submit(payload: FormSubmission):
+def form_submit(payload: FormSubmission, request: Request):
+    
+    verify_api_key(request)
+
     try:
         airtable_response = send_to_airtable(payload.model_dump())
         return build_success_response(payload, airtable_response)
