@@ -1,6 +1,9 @@
 from fastapi import FastAPI, HTTPException, Request, APIRouter, Depends
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
+from pyairtable import Api
+from pyairtable.api.types import CreateRecordResponse
+
 import logging
 import os
 
@@ -8,6 +11,9 @@ import os
 app = FastAPI()
 logger = logging.getLogger(__name__)
 API_SECRET = os.getenv("FORM_API_SECRET") #python -c "import secrets; print(secrets.token_hex(32))"
+AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
+AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME")
 
 
 def verify_api_key(request: Request) -> None:
@@ -32,22 +38,29 @@ def build_exception(status_code: int, detail: str, exc: Exception) -> HTTPExcept
     return HTTPException(status_code=status_code, detail=detail)
 
 
-def send_to_airtable(data: dict) -> dict:
-    message = data.get("message", "").lower()
+def get_airtable_table():
+    if not AIRTABLE_API_KEY or not AIRTABLE_BASE_ID or not AIRTABLE_TABLE_NAME:
+        raise RuntimeError("Airtable configuration is missing")
 
-    if "test-fail-401" in message:
-        raise PermissionError("Airtable API key invalid or missing")
-    if "test-fail-503" in message:
-        raise TimeoutError("Airtable request timed out")
-    if "test-fail-400" in message:
-        raise ValueError("Airtable rejected the payload structure")
-    if "test-fail-500" in message:
-        raise RuntimeError("Unexpected Airtable internal error")
+    api = Api(AIRTABLE_API_KEY)
+    return api.table(AIRTABLE_BASE_ID, AIRTABLE_TABLE_NAME)
+
+def send_to_airtable(data: dict) -> dict:
+    table = get_airtable_table()
+
+    fields = {
+        "Name": data.get("name"),
+        "Email": data.get("email"),
+        "Company": data.get("company"),
+        "Message": data.get("message"),
+    }
+
+    record = table.create(fields)
 
     return {
-        "id": "rec_dummy_123",
+        "id": record.get("id"),
         "status": "created",
-        "received": data
+        "received": record.get("fields", {})
     }
 
 def build_success_response(payload: FormSubmission, airtable_response: dict) -> dict:
@@ -84,9 +97,13 @@ def form_submit(payload: FormSubmission, request: Request):
 
     except TimeoutError as exc:
         raise build_exception(503, "Submission service temporarily unavailable", exc) from exc
+    
+    except ConnectionError as exc:
+        raise build_exception(503, "Submission service unreachable", exc) from exc
 
     except ValueError as exc:
         raise build_exception(502, "Submission service rejected the request", exc) from exc
+    
 
     except Exception as exc:
         raise build_exception(500, "Internal server error", exc) from exc
