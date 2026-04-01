@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Request, APIRouter, Depends
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from pyairtable import Api
-from pyairtable.api.types import CreateRecordResponse
+
 
 import logging
 import os
