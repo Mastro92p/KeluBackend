@@ -5,7 +5,6 @@ from pyairtable import Api
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html   
 
-
 import logging
 import os
 
